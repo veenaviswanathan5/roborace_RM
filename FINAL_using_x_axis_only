@@ -11,14 +11,17 @@ NOTES FOR CODING SUBSYSTEM -
 //These are for wheel movements(only 2 of the following variables can have non zero value at a particular time)
 
 int x;  // to be feeded in right motors // from joystcik
-int y;  // to be feeded in left motors
-
+//int y;  // to be feeded in left motors
+int x_axis,y_axis; 
+int x_max;
 // these are for pwm generation 
 const int pwm_freq = 20000;        //Mentioned in mdd10a datasheet
 const int pwm_resolution = 9;     // according to the formula PWM_freq * 2^PWM_resolution
 const int pwm_channel_0 = 0;       // for wheels on the right(wire A)
 const int pwm_channel_1 = 1;       // for wheels on the left (wire B)
 uint16_t max_pwm=0; 
+const int speed=512; 
+float x_mapped=0; 
 
 // right side pins 
 const int rmd1m1A = 33;             //motor driver 1 motor 1 wire 1(for right side motors)
@@ -87,7 +90,7 @@ void onDisconnectedController(ControllerPtr ctl) {
     }
 }
 
-void dumpGamepad(ControllerPtr ctl) {
+/*void dumpGamepad(ControllerPtr ctl) {
     Serial.printf(
         "idx=%d, dpad: 0x%02x, buttons: 0x%04x, axis L: %4d, %4d, axis R: %4d, %4d, brake: %4d, throttle: %4d, "
         "misc: 0x%02x, gyro x:%6d y:%6d z:%6d, accel x:%6d y:%6d z:%6d\n",
@@ -108,14 +111,17 @@ void dumpGamepad(ControllerPtr ctl) {
         ctl->accelY(),       // Accelerometer Y
         ctl->accelZ()        // Accelerometer Z
     );
+    x = ctl->axisX();
+ //y = ctl->axisY();
+ throttle = ctl->throttle(); //right instant turning
+ brakes = ctl->brake(); //left instant turning
 }
 
 // functions we are using:
- x = ctl->axisX();
- y = ctl->axisY();
- throttle = ctl->throttle(); //right instant turning
- brakes = ctl->brake(); //left instant turning
  
+//  x = myController->axisX();  // Correct placement
+//   throttle = myController->throttle();
+//   brakes = myController->brake();
 
 void processControllers() {
     for (auto myController : myControllers) {
@@ -133,7 +139,120 @@ void processControllers() {
             }
         }
     }
+}*/ 
+
+void dumpGamepad(ControllerPtr ctl) {
+    Serial.printf(
+        "axis L: %4d, brake: %4d, throttle: %4d, ",
+        
+        //ctl->index(),        // Controller Index
+        //ctl->dpad(),         // D-pad
+        //ctl->buttons(),      // bitmask of pressed buttons
+        ctl->axisX(),        // (-511 - 512) left X Axis
+        //ctl->axisY(),        // (-511 - 512) left Y axis
+        //ctl->axisRX(),       // (-511 - 512) right X axis
+        //ctl->axisRY(),       // (-511 - 512) right Y axis
+        ctl->brake(),        // (0 - 1023): brake button
+        ctl->throttle()     // (0 - 1023): throttle (AKA gas) button
+        //ctl->miscButtons(),  // bitmask of pressed "misc" buttons
+        //ctl->gyroX(),        // Gyro X
+        //ctl->gyroY(),        // Gyro Y
+        //ctl->gyroZ(),        // Gyro Z
+        //ctl->accelX(),       // Accelerometer X
+        //ctl->accelY(),       // Accelerometer Y
+        //ctl->accelZ()        // Accelerometer Z
+    );
+ x = ctl->axisX();
+ //y = ctl->axisY();
+ throttle = ctl->throttle(); //right instant turning
+ brakes = ctl->brake(); //left instant turning
+ //turn = ctl->axisRX();
+ //turn_dir = ctl->axisRY();
 }
+
+
+
+// functions we are using:
+
+//  x = myController->axisX();  // Correct placement
+//   throttle = myController->throttle();
+//   brakes = myController->brake();
+void processGamepad(ControllerPtr ctl) {
+    // There are different ways to query whether a button is pressed.
+    // By query each button individually:
+    //  a(), b(), x(), y(), l1(), etc...
+    if (ctl->a()) {
+        static int colorIdx = 0;
+        // Some gamepads like DS4 and DualSense support changing the color LED.
+        // It is possible to change it by calling:
+        switch (colorIdx % 3) {
+            case 0:
+                // Red
+                ctl->setColorLED(255, 0, 0);
+                break;
+            case 1:
+                // Green
+                ctl->setColorLED(0, 255, 0);
+                break;
+            case 2:
+                // Blue
+                ctl->setColorLED(0, 0, 255);
+                break;
+        }
+        colorIdx++;
+    }
+
+    if (ctl->b()) {
+        // Turn on the 4 LED. Each bit represents one LED.
+        static int led = 0;
+        led++;
+        // Some gamepads like the DS3, DualSense, Nintendo Wii, Nintendo Switch
+        // support changing the "Player LEDs": those 4 LEDs that usually indicate
+        // the "gamepad seat".
+        // It is possible to change them by calling:
+        ctl->setPlayerLEDs(led & 0x0f);
+    }
+
+    if (ctl->x()) {
+        // Some gamepads like DS3, DS4, DualSense, Switch, Xbox One S, Stadia support rumble.
+        // It is possible to set it by calling:
+        // Some controllers have two motors: "strong motor", "weak motor".
+        // It is possible to control them independently.
+        ctl->playDualRumble(0 /* delayedStartMs */, 250 /* durationMs */, 0x80 /* weakMagnitude */,
+                            0x40 /* strongMagnitude */);
+    }
+
+    // Another way to query controller data is by getting the buttons() function.
+    // See how the different "dump*" functions dump the Controller info.
+    dumpGamepad(ctl);
+}
+
+/*void processControllers() {
+    for (auto myController : myControllers) {
+        if (myController && myController->isConnected() && myController->hasData()) {
+            dumpGamepad(myController);  // Ensure values are updated properly
+            if (myController->isGamepad()) {
+                processGamepad(myController);
+            } else if (myController->isMouse()) {
+                processMouse(myController);
+            } else if (myController->isKeyboard()) {
+                processKeyboard(myController);
+            } else if (myController->isBalanceBoard()) {
+                processBalanceBoard(myController);
+            } else {
+                Serial.println("Unsupported controller");
+            }
+        }
+    }
+}*/
+void processControllers() {
+    for (auto myController : myControllers) {
+        if (myController && myController->isConnected() && myController->hasData()) {
+            processGamepad(myController);  // Now processGamepad() is defined
+        }
+    }
+}
+
 
 // Arduino setup function. Runs in CPU 1
 void setup() 
@@ -147,8 +266,7 @@ void setup()
   ledcAttachPin(rmd1m1A,pwm_channel_0);
   ledcAttachPin(rmd1m2A,pwm_channel_0);
   //Attaching the pwm channel 2,3 to right side motor driver
-  ledcSetup(pwm_channel_2,pwm_freq,pwm_resolution);
-  ledcSetup(pwm_channel_3,pwm_freq,pwm_resolution);
+  
   //LEFT MOTORS
   ledcAttachPin(lmd2m1A,pwm_channel_1);
   ledcAttachPin(lmd2m2A,pwm_channel_1);
@@ -158,7 +276,7 @@ void setup()
   pinMode(lmd2m1B,OUTPUT);
   pinMode(lmd2m2B,OUTPUT);
   
-   int x_axis,y_axis; 
+   
    uint16_t max_pwm;
    uint16_t right_pwm,left_pwm;
 
@@ -187,6 +305,13 @@ void setup()
 }
 
 // Arduino loop function. Runs in CPU 1.
+void stop_motors();  // Function prototype
+void calc_speed(int throttle, int x_axis);  
+void calc_speed_reverse(int brakes, int x_axis);
+
+
+
+
 void loop() 
 {
     // This call fetches all the controllers' data.
@@ -197,44 +322,52 @@ void loop()
 
     // The main loop must have some kind of "yield to lower priority task" event.
     // Otherwise, the watchdog will get triggered.
-    // If your main loop doesn't have one, just add a simple `vTaskDelay(1)`.
+    // If your main loop doesn't have one, just add a simple vTaskDelay(1).
     // Detailed info here:
     // https://stackoverflow.com/questions/66278271/task-watchdog-got-triggered-the-tasks-did-not-reset-the-watchdog-in-time
 
     //     vTaskDelay(1);
     delay(150);
      
-    max_pwm = pow(2,pwm_resolution);
-    int speed=0;
+    max_pwm =  pow(2, pwm_resolution);
+
+    //int speed=0;
     
     int z,r,l;
     x_axis = x;
-    y_axis = y*(-1);
+    //y_axis = y*(-1);
      // if ((-100<x_axis<100) && (-100<y_axis<100)) 
-    if ((x_axis > -100 && x_axis < 100) && (y_axis > -100 && y_axis < 100))  // dead zone fro joystick 
+    if (x_axis > -40 && x_axis < 40) //&& (y_axis > -100 && y_axis < 100))  // dead zone fro joystick 
     {
-    Stop();
+    stop_motors();
    } 
     
-    int x_max=max_pwm;
+     x_max=max_pwm;
     // since we need to map it for pwm calculation, it can be set to same resolutoon 
-    int forward_speed = map(throttle, -512, 512, 0, 512); 
-    int reverse_speed = map(brake, -512, 512, 0, 512); 
+    int forward_speed = map(throttle, 0, 1023, 0, 512); 
+    Serial.print("throttle value");
+    Serial.println(forward_speed);
 
-   if(throttle>0 && brake <=0 ){   // see deadzone 
-   speed =calc_speed(throttle, x_axis);
+    int reverse_speed = map(brakes, 0, 1023, 0, 512); 
+
+    Serial.print("brake value");
+    Serial.println(reverse_speed);
+
+   if(throttle>0 && brakes <=0 ){   // see deadzone 
+   calc_speed(throttle, x_axis);
    }
    
-   if(throttle <=0 && brake>0){
-    speed=calc_speed_reverse(brake, x_axis);
+   if(throttle <=0 && brakes>0){
+    calc_speed_reverse(brakes, x_axis);
+   }
 
   
-   if(throttle>0 && brake>0){
+   if(throttle>0 && brakes>0){
     stop_motors();
 
    }
 
-   }
+   
     
 
 }
@@ -243,14 +376,14 @@ void loop()
 
 void calc_speed(int forward_speed, int x)
 {
-    forward_speed = map(forward_speed, 0, 512, 0, max_pwm); // 
+    //forward_speed = map(forward_speed, 0, 512, 0, max_pwm); // 
 
-    ledcWrite(pwm_channel_1, forward_speed); // left motor moves at the speed given by throttle button 
+    //ledcWrite(pwm_channel_1, forward_speed); // left motor moves at the speed given by throttle button 
     // right motor speed for right turn
 
-    int x_mapped = map(abs(x), 0, 512, 0, max_pwm);
+     x_mapped = map(abs(x), 0, 512, 0, max_pwm);
 
-    float ratio = 1.0 - (float(x_mapped) / x_max);
+    float ratio = 1.0 - (((x_mapped)*(x_mapped)) / (x_max*x_max));
     
     int l_pwm, r_pwm;
 
@@ -265,6 +398,14 @@ void calc_speed(int forward_speed, int x)
         r_pwm = forward_speed;
     }
 
+    if(r_pwm>speed){
+      r_pwm = speed;
+    }
+
+    if(l_pwm>speed){
+      l_pwm = speed;
+    }
+
     ledcWrite(pwm_channel_0, r_pwm); // apply calculated right motor speed
     ledcWrite(pwm_channel_1, l_pwm); // apply calculated left motor speed
 
@@ -275,16 +416,17 @@ void calc_speed(int forward_speed, int x)
   digitalWrite(lmd2m2B,1);
   Serial.println("Running forward");
   Serial.println(l_pwm);
-    Serial.println(r_pwm);
+  Serial.println(r_pwm);
 }
 
 void calc_speed_reverse(int reverse_speed, int x)
 {
     reverse_speed = map(reverse_speed, 0, 512, 0, max_pwm);  
 
-    int x_mapped = map(abs(x), 0, 512, 0, max_pwm);
-    float ratio = 1.0 - (float(x_mapped) / x_max);
-
+    x_mapped = map(abs(x), 0, 512, 0, max_pwm);
+    //float ratio = 1.0 - (float(x_mapped) / x_max);
+    float ratio = 1.0 - (((x_mapped)*(x_mapped)) / (x_max*x_max));
+    
     int l_pwm, r_pwm;
 
     if (x >= 0)  // right turn while reversing, slow down right motor
@@ -298,8 +440,17 @@ void calc_speed_reverse(int reverse_speed, int x)
         r_pwm = reverse_speed;
     }
 
-    ledcWrite(pwm_channel_0, l_pwm); // apply left motor speed in reverse
-    ledcWrite(pwm_channel_1, r_pwm); // apply right motor speed in reverse
+    if(r_pwm>speed){
+      r_pwm = speed;
+    }
+
+    if(l_pwm>speed){
+      l_pwm = speed;
+    }
+
+
+    ledcWrite(pwm_channel_0, r_pwm); // apply left motor speed in reverse
+    ledcWrite(pwm_channel_1, l_pwm); // apply right motor speed in reverse
 
   digitalWrite(rmd1m1B,1);
   digitalWrite(rmd1m2B,1);
@@ -315,14 +466,3 @@ void stop_motors()
   ledcWrite(pwm_channel_0, 0); //stop
   ledcWrite(pwm_channel_1, 0);
 }
-
-    
-  
-
-
-
-
-
-  
- 
-
